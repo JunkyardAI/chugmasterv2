@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CHUG-O-MATIC 3000</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Roboto+Mono:wght@700&display=swap');
+
+        :root {
+            --neon-green: #39ff14;
+            --toxic-yellow: #ffff00;
+            --alert-red: #ff0000;
+        }
+
+        body {
+            font-family: 'Roboto Mono', monospace;
+            background-color: #111;
+            color: var(--neon-green);
+            overflow-x: hidden;
+            height: 100vh;
+            /* Scanline effect */
+            background-image: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 2px, 3px 100%;
+        }
+
+        /* Glitch overlay */
+        .scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        /* Hazard stripe background for active state */
+        body.chug-mode {
+            background: repeating-linear-gradient(
+                45deg,
+                #111,
+                #111 20px,
+                #330000 20px,
+                #330000 40px
+            );
+            animation: panic-strobe 0.1s infinite;
+        }
+
+        @keyframes panic-strobe {
+            0% { filter: contrast(1); }
+            50% { filter: contrast(2) hue-rotate(90deg); }
+            100% { filter: contrast(1); }
+        }
+
+        .wheel-container {
+            position: relative;
+            width: 320px;
+            height: 320px;
+            margin: 0 auto;
+            filter: drop-shadow(0 0 15px var(--neon-green));
+        }
+
+        .wheel {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            position: relative;
+            border: 10px solid #222;
+            box-sizing: border-box;
+            overflow: hidden;
+            /* Transition is handled via JS for complex physics */
+        }
+
+        .pointer {
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 25px solid transparent;
+            border-right: 25px solid transparent;
+            border-top: 50px solid var(--toxic-yellow);
+            z-index: 10;
+            filter: drop-shadow(0 0 10px var(--toxic-yellow));
+        }
+
+        .segment-label {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform-origin: 0 0;
+            color: #000;
+            font-family: 'Black Ops One', cursive;
+            font-size: 3rem;
+            text-shadow: 0px 0px 5px rgba(255,255,255,0.5);
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            line-height: 40px;
+            margin-top: -20px;
+            margin-left: -20px;
+        }
+
+        .hub {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60px;
+            height: 60px;
+            background: #000;
+            border: 4px solid var(--neon-green);
+            border-radius: 50%;
+            z-index: 5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .timer-display {
+            font-family: 'Black Ops One', cursive;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -2px;
+            text-shadow: 0 0 10px var(--alert-red);
+        }
+
+        /* Screen Shake Keyframes */
+        @keyframes violent-shake {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            25% { transform: translate(-10px, 10px) rotate(-2deg); }
+            50% { transform: translate(10px, -10px) rotate(2deg); }
+            75% { transform: translate(-10px, -10px) rotate(-2deg); }
+            100% { transform: translate(0, 0) rotate(0deg); }
+        }
+
+        .shaking {
+            animation: violent-shake 0.2s infinite;
+        }
+
+        /* Word Popups */
+        .word-pop {
+            position: absolute;
+            font-family: 'Black Ops One', cursive;
+            font-size: 4rem;
+            color: white;
+            text-shadow: 5px 5px 0px #000;
+            animation: pop-fade 0.5s forwards;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        @keyframes pop-fade {
+            0% { transform: scale(0) rotate(var(--rot)); opacity: 0; }
+            50% { transform: scale(1.5) rotate(var(--rot)); opacity: 1; }
+            100% { transform: scale(2) rotate(var(--rot)); opacity: 0; }
+        }
+
+        .glitch-text {
+            animation: glitch-anim 2s infinite;
+        }
+
+        @keyframes glitch-anim {
+            0% { transform: skew(0deg); }
+            20% { transform: skew(-2deg); }
+            40% { transform: skew(2deg); }
+            60% { transform: skew(0deg); }
+            80% { transform: skew(5deg); }
+            100% { transform: skew(0deg); }
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center p-4">
+
+    <div class="scanlines"></div>
+
+    <div id="main-ui" class="w-full max-w-lg relative z-10 text-center">
+        
+        <h1 class="text-5xl md:text-6xl mb-8 glitch-text font-black text-transparent bg-clip-text bg-gradient-to-t from-green-600 to-green-400 drop-shadow-[0_0_10px_rgba(57,255,20,0.8)]">
+            CHUG-O-MATIC
+        </h1>
+
+        <div class="wheel-container mb-8" id="wheel-container">
+            <div class="pointer"></div>
+            <div class="wheel bg-black" id="wheel">
+                <div class="hub">💀</div>
+            </div>
+        </div>
+
+        <div class="bg-black/80 backdrop-blur-sm border-4 border-green-500 p-6 rounded-none shadow-[0_0_30px_rgba(57,255,20,0.3)] transform transition-all" id="control-panel">
+            <div id="status-text" class="text-xl font-bold mb-2 tracking-widest text-yellow-400">INITIATE SEQUENCE</div>
+            
+            <div class="relative h-32 flex items-center justify-center overflow-hidden bg-black border-2 border-gray-800 mb-4">
+                <div id="timer-display" class="text-7xl text-red-600 timer-display relative z-10">0.00</div>
+                <div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/diagmonds-light.png')] opacity-10"></div>
+            </div>
+
+            <button id="spin-btn" onclick="spinSequence()" 
+                class="w-full bg-green-600 hover:bg-green-500 text-black font-black text-2xl py-6 uppercase tracking-tighter border-b-8 border-green-800 active:border-b-0 active:translate-y-2 transition-all shadow-[0_0_20px_var(--neon-green)]">
+                PULL THE LEVER
+            </button>
+            
+            <p class="mt-4 text-xs text-gray-500 uppercase">Drink Responsibly • Extreme Mode Active</p>
+        </div>
+
+    </div>
+
+    <script>
+        const segments = [
+            { number: 1, color: '#FF355E' }, // Radical Red
+            { number: 2, color: '#FF6EFF' }, // Shocking Pink
+            { number: 3, color: '#FFFF00' }, // Laser Lemon
+            { number: 4, color: '#CCFF00' }, // Volt
+            { number: 5, color: '#00FF00' }  // Electric Lime
+        ];
+
+        const wheel = document.getElementById('wheel');
+        const wheelContainer = document.getElementById('wheel-container');
+        const spinBtn = document.getElementById('spin-btn');
+        const timerDisplay = document.getElementById('timer-display');
+        const statusText = document.getElementById('status-text');
+        const controlPanel = document.getElementById('control-panel');
+        
+        let currentRotation = 0;
+        let isSpinning = false;
+        let timerInterval = null;
+
+        function initWheel() {
+            const segmentAngle = 360 / segments.length;
+            let gradientString = 'conic-gradient(';
+
+            segments.forEach((seg, index) => {
+                const startAngle = index * segmentAngle;
+                const endAngle = (index + 1) * segmentAngle;
+                gradientString += `${seg.color} ${startAngle}deg ${endAngle}deg, `;
+
+                const label = document.createElement('div');
+                label.className = 'segment-label';
+                label.textContent = seg.number;
+                
+                const midAngle = startAngle + (segmentAngle / 2);
+                const rad = (midAngle - 90) * (Math.PI / 180); 
+                const radius = 110; 
+                const x = Math.cos(rad) * radius;
+                const y = Math.sin(rad) * radius;
+
+                label.style.transform = `translate(${x}px, ${y}px) rotate(${midAngle}deg)`;
+                // Rotate text to face center
+                label.style.transform += ` rotate(${-midAngle + 90}deg)`;
+                
+                wheel.appendChild(label);
+            });
+
+            gradientString = gradientString.slice(0, -2) + ')';
+            wheel.style.background = gradientString;
+        }
+
+        function spinSequence() {
+            if (isSpinning) return;
+            
+            stopTimer();
+            isSpinning = true;
+            spinBtn.disabled = true;
+            spinBtn.innerText = "LOCKED IN";
+            statusText.innerText = "WINDING UP...";
+            statusText.className = "text-xl font-bold mb-2 tracking-widest text-red-500 blink";
+
+            // 1. Wind Up (Backwards rotation)
+            const windUpAngle = currentRotation - 60; // Pull back
+            wheel.style.transition = "transform 1s cubic-bezier(0.6, -0.28, 0.735, 0.045)"; // Pull back tension curve
+            wheel.style.transform = `rotate(${windUpAngle}deg)`;
+
+            // 2. The Launch
+            setTimeout(() => {
+                statusText.innerText = "CRITICAL VELOCITY";
+                
+                // Calculate Result
+                const resultIndex = Math.floor(Math.random() * segments.length);
+                const resultValue = segments[resultIndex].number;
+                
+                // Math for target
+                const segmentAngle = 360 / segments.length;
+                const segmentCenter = (resultIndex * segmentAngle) + (segmentAngle / 2);
+                const targetRotation = (360 - segmentCenter);
+                
+                // Huge forward spin (20 rotations)
+                const totalSpins = 360 * 15;
+                const nextRotation = windUpAngle + totalSpins + targetRotation - (windUpAngle % 360) + (Math.random() * 20 - 10);
+                
+                currentRotation = nextRotation;
+
+                // Fast Launch Curve
+                wheel.style.transition = "transform 3s cubic-bezier(0.1, 1, 0.2, 1)";
+                wheel.style.transform = `rotate(${currentRotation}deg)`;
+
+                // Screen Shake on launch
+                controlPanel.classList.add('shaking');
+                setTimeout(() => controlPanel.classList.remove('shaking'), 500);
+
+                // 3. Finish
+                setTimeout(() => {
+                    isSpinning = false;
+                    startExtremeTimer(resultValue);
+                }, 3000);
+
+            }, 1000); // Wait for windup
+        }
+
+        function startExtremeTimer(seconds) {
+            document.body.classList.add('chug-mode');
+            controlPanel.classList.add('shaking'); // Continuous shaking
+            spinBtn.classList.add('hidden');
+            
+            statusText.innerText = "CHUG! CHUG! CHUG!";
+            statusText.style.color = "#FF0000";
+            
+            let timeLeft = seconds * 1000; // Convert to ms
+            
+            // Random word generator interval
+            const wordInterval = setInterval(() => {
+                const words = ["GULP", "CHUG", "GO!", "FASTER", "DRINK", "AAA!!!"];
+                showFloatingWord(words[Math.floor(Math.random() * words.length)]);
+            }, 600);
+
+            timerInterval = setInterval(() => {
+                timeLeft -= 17; // Roughly 60fps decrement
+                
+                if (timeLeft >= 0) {
+                    // Format: S.MS
+                    timerDisplay.innerText = (timeLeft / 1000).toFixed(2);
+                    
+                    // Color shift based on urgency
+                    if(timeLeft < 1000) {
+                        timerDisplay.style.color = "#FFF";
+                        timerDisplay.style.fontSize = "6rem";
+                    }
+                } else {
+                    clearInterval(timerInterval);
+                    clearInterval(wordInterval);
+                    finishSequence();
+                }
+            }, 17);
+        }
+
+        function finishSequence() {
+            document.body.classList.remove('chug-mode');
+            controlPanel.classList.remove('shaking');
+            timerDisplay.innerText = "DONE";
+            timerDisplay.style.color = "#39ff14";
+            
+            statusText.innerText = "SEQUENCE COMPLETE";
+            statusText.style.color = "#39ff14";
+            
+            spinBtn.disabled = false;
+            spinBtn.classList.remove('hidden');
+            spinBtn.innerText = "NEXT VICTIM";
+            
+            showFloatingWord("VICTORY");
+            showFloatingWord("BURP");
+        }
+
+        function stopTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            document.body.classList.remove('chug-mode');
+            controlPanel.classList.remove('shaking');
+            timerDisplay.innerText = "0.00";
+            timerDisplay.style.color = "#ff0000";
+        }
+
+        function showFloatingWord(text) {
+            const el = document.createElement('div');
+            el.className = 'word-pop';
+            el.innerText = text;
+            
+            // Random Position
+            const x = Math.random() * 80 + 10;
+            const y = Math.random() * 80 + 10;
+            const rot = (Math.random() * 60) - 30;
+            
+            el.style.left = x + '%';
+            el.style.top = y + '%';
+            el.style.setProperty('--rot', rot + 'deg');
+            el.style.color = Math.random() > 0.5 ? '#ffff00' : '#ff00ff';
+            
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 1000);
+        }
+
+        initWheel();
+    </script>
+</body>
+</html>
